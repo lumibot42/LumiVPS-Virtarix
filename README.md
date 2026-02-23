@@ -13,13 +13,14 @@ This guide is thorough but concise, with **one code block per command** for easy
 ## Defaults used by this repo
 
 - **Default admin user:** `lumi`
+- **Default timezone:** `America/Chicago` (Central Time)
 - **Default provider hint:** `virtarix`
 
 You can override prompts during runtime, but docs below assume `lumi`.
 
 Input validation highlights:
 - admin username must be a valid Linux username format (e.g. `lumi`)
-- timezone must exist on system (e.g. `Europe/Berlin`)
+- timezone must exist on system (e.g. `America/Chicago`)
 - custom paths should be absolute paths
 
 ---

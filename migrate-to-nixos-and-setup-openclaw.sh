@@ -457,7 +457,7 @@ phase1_prompt_inputs() {
 
   ADMIN_USER="${ADMIN_USER:-lumi}"
   HOSTNAME_SHORT="${HOSTNAME_SHORT:-$default_host}"
-  TIMEZONE="${TIMEZONE:-Europe/Berlin}"
+  TIMEZONE="${TIMEZONE:-America/Chicago}"
   NIXOS_CHANNEL="${NIXOS_CHANNEL:-nixos-24.11}"
   ENABLE_DO_NETCONF="${ENABLE_DO_NETCONF:-yes}"
   PROVIDER_HINT="${PROVIDER_HINT:-virtarix}"
@@ -493,7 +493,7 @@ phase1_prompt_inputs() {
     if validate_timezone "$TIMEZONE"; then
       break
     fi
-    warn "Invalid timezone '$TIMEZONE'. Example: Europe/Berlin"
+    warn "Invalid timezone '$TIMEZONE'. Example: America/Chicago"
   done
 
   prompt_default NIXOS_CHANNEL "NixOS channel" "$NIXOS_CHANNEL"
