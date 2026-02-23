@@ -1,57 +1,60 @@
 # LumiVPS-Virtarix
 
-End-to-end automation for:
+Automated path from a **fresh Ubuntu 24.04 VPS** to:
 
-1. **Ubuntu 24.04 VPS → NixOS migration**
-2. **OpenClaw setup in Nix mode**
-3. **Post-reboot continuation using the same script**
-
-This guide is thorough but concise, with **one code block per command** for easy copy/paste.
+1. NixOS (in-place migration)
+2. OpenClaw in Nix mode
+3. Post-reboot continuation using the same script
 
 ---
 
-## Defaults used by this repo
+## Assumptions (explicit)
 
-- **Default admin user:** `lumi`
-- **Default timezone:** `America/Chicago` (Central Time)
-- **Default provider hint:** `virtarix`
+This guide assumes:
 
-You can override prompts during runtime, but docs below assume `lumi`.
+- starting OS is **Ubuntu 24.04**
+- the machine is fresh/minimal and may have **no extra dependencies installed**
+- you have `root` or `sudo` access
+- outbound internet works
+- you have provider console/recovery access
 
-Input validation highlights:
-- admin username must be a valid Linux username format (e.g. `lumi`)
-- timezone must exist on system (e.g. `America/Chicago`)
-- custom paths should be absolute paths
+Defaults in this repo:
 
-PATH handling highlights:
-- script enforces a hardened common PATH for root + non-interactive shells
-- user-context commands are run with explicit PATH bootstrap
-- command locations are written into the migration report for debugging
+- admin user: `lumi`
+- timezone: `America/Chicago`
+- provider hint: `virtarix`
 
 ---
 
-## What is in this repo
+## Files in this repo
 
 - `migrate-to-nixos-and-setup-openclaw.sh` (**recommended**)
   - Phase 1 on Ubuntu: migration prep + `nixos-infect`
-  - Phase 2 on NixOS: OpenClaw bootstrap with Home Manager
+  - Phase 2 on NixOS: OpenClaw bootstrap via Home Manager
 - `setup-openclaw-nix-ubuntu24.sh` (legacy helper)
-  - Nix-based OpenClaw setup on Ubuntu only (no OS migration)
+  - Ubuntu-only Nix/OpenClaw bootstrap (no OS migration)
 
 ---
 
-## Before you start (important)
+## Step-by-step: fresh Ubuntu 24.04 → NixOS → OpenClaw
 
-- Use a **fresh or disposable Ubuntu 24.04 VPS**.
-- The migration is **destructive** to the current OS install.
-- Ensure provider console/recovery access is available.
-- Have at least one valid SSH public key ready.
+## 0) Connect to server
 
----
+```bash
+ssh root@<server-ip>
+```
 
-## Quick start (full migration flow)
+## 1) Install baseline tools (dependency bootstrap)
 
-### 1) Clone repo on your Ubuntu VPS
+```bash
+apt-get update
+```
+
+```bash
+apt-get install -y ca-certificates curl git openssh-client
+```
+
+## 2) Clone this repository
 
 ```bash
 git clone https://github.com/lumibot42/LumiVPS-Virtarix.git
@@ -61,42 +64,42 @@ git clone https://github.com/lumibot42/LumiVPS-Virtarix.git
 cd LumiVPS-Virtarix
 ```
 
-### 2) Run migration script (Phase 1 on Ubuntu)
+## 3) Run migration script (Phase 1 on Ubuntu)
 
 ```bash
 sudo bash ./migrate-to-nixos-and-setup-openclaw.sh
 ```
 
-The script prompts for:
+You will be prompted for:
+
 - admin username (default `lumi`)
 - hostname
-- timezone
+- timezone (default `America/Chicago`)
 - SSH public keys
-- provider/network hints (provider default `virtarix`)
+- provider/network hints (default provider `virtarix`)
 
-It then starts migration and reboots.
+Expected result: migration starts and server reboots into NixOS.
 
-### 3) Reconnect after reboot (now on NixOS)
+## 4) Reconnect after reboot
 
 ```bash
 ssh lumi@<server-ip>
 ```
 
-### 4) Run Phase 2 (OpenClaw setup)
+## 5) Continue setup (Phase 2 on NixOS)
 
 ```bash
 sudo bash /etc/nixos/openclaw-migration/migrate.sh
 ```
 
-The script prompts for:
+You will be prompted for:
+
 - OpenClaw directories/profile options
 - OpenAI and/or Anthropic API key
 
-Channel setup is intentionally deferred.
-OpenClaw still boots without channels; you can add Discord (or any supported channel) later in `flake.nix`.
-On reruns, if secret files already exist, you can choose to reuse them instead of retyping values.
+Channel setup is intentionally deferred (Discord/channels can be added later in `flake.nix`).
 
-### 5) Validate service
+## 6) Validate service
 
 ```bash
 sudo -u lumi systemctl --user status openclaw-gateway
@@ -108,38 +111,47 @@ sudo -u lumi journalctl --user -u openclaw-gateway -f
 
 ---
 
-## Legacy path (Ubuntu-only, no NixOS migration)
+## If `git` is unavailable and you want direct script download
 
 ```bash
-bash ./setup-openclaw-nix-ubuntu24.sh
+apt-get update
 ```
 
-Use this only if you do **not** want to migrate to NixOS.
+```bash
+apt-get install -y ca-certificates curl
+```
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/lumibot42/LumiVPS-Virtarix/main/migrate-to-nixos-and-setup-openclaw.sh -o /root/migrate.sh
+```
+
+```bash
+chmod +x /root/migrate.sh
+```
+
+```bash
+sudo bash /root/migrate.sh
+```
 
 ---
 
-## Windows: generate SSH keys (when needed)
+## Windows: generate SSH keys (if needed)
 
-Use this if you need SSH keys for:
-- VPS login
-- GitHub authentication
+Use these for VPS SSH access and/or GitHub SSH auth.
 
-### PowerShell (Windows 10/11 built-in OpenSSH)
+## 1) Generate key
 
 ```powershell
 ssh-keygen -t ed25519 -C "your_email@example.com"
 ```
 
-When prompted for path, press Enter for default:
-`C:\Users\<You>\.ssh\id_ed25519`
-
-### Show public key (copy this value)
+## 2) Print public key
 
 ```powershell
 type $env:USERPROFILE\.ssh\id_ed25519.pub
 ```
 
-### Optional: start ssh-agent and load key
+## 3) Optional: start ssh-agent
 
 ```powershell
 Get-Service ssh-agent | Set-Service -StartupType Automatic
@@ -153,25 +165,9 @@ Start-Service ssh-agent
 ssh-add $env:USERPROFILE\.ssh\id_ed25519
 ```
 
-### Test GitHub SSH auth
+## 4) Test GitHub SSH auth
 
 ```powershell
-ssh -T git@github.com
-```
-
-If prompted to trust host, type `yes`.
-
----
-
-## Add your SSH key to GitHub
-
-1. GitHub → **Settings** → **SSH and GPG keys** → **New SSH key**
-2. Key type: **Authentication key**
-3. Paste `id_ed25519.pub`
-
-Then test from terminal:
-
-```bash
 ssh -T git@github.com
 ```
 
@@ -179,42 +175,38 @@ ssh -T git@github.com
 
 ## Channel setup after bootstrap (optional)
 
-This migration script does not configure messaging channels.
-After bootstrap, add your preferred channel (for example Discord) in `flake.nix`, then apply Home Manager again.
+The migration script does not configure messaging channels.
+After bootstrap, add Discord (or any supported channel) in `flake.nix`, then apply Home Manager.
 
 ---
 
 ## Recovery / troubleshooting
 
-### If SSH does not come back after migration
-
-Use VPS web console/recovery mode and inspect boot/network.
-
-### Check migration artifacts
+## Show migration artifacts
 
 ```bash
 sudo ls -la /etc/nixos/openclaw-migration
 ```
 
-### View migration report
+## View migration report
 
 ```bash
 sudo cat /etc/nixos/openclaw-migration/last-run-report.txt
 ```
 
-### Show PATH + command resolution captured by script
+## Show PATH and command resolution captured by script
 
 ```bash
 sudo grep -E "^(PATH in use|cmd )" /etc/nixos/openclaw-migration/last-run-report.txt
 ```
 
-### View infect log
+## View infect log
 
 ```bash
 sudo cat /etc/nixos/openclaw-migration/infect.log
 ```
 
-### Re-run post-migration setup safely
+## Re-run phase 2 safely
 
 ```bash
 sudo bash /etc/nixos/openclaw-migration/migrate.sh
@@ -224,14 +216,14 @@ sudo bash /etc/nixos/openclaw-migration/migrate.sh
 
 ## Security notes
 
-- Treat API keys and bot tokens as secrets.
-- Rotate tokens if accidentally exposed.
-- Keep private keys private (`id_ed25519`, never share it).
-- Migration reports are redacted for common secret patterns.
-- Persistent state avoids storing raw API key/token values.
+- migration is destructive to current Ubuntu install
+- take a VPS snapshot before starting
+- keep private keys private (`id_ed25519`)
+- keep API keys in secret files, not in public repos
+- reports are redacted for common secret patterns
 
 ---
 
 ## License
 
-Use at your own risk. Review scripts before running on production systems.
+Use at your own risk. Review scripts before running in production.
