@@ -123,9 +123,8 @@ save_state() {
       ADMIN_USER HOSTNAME_SHORT TIMEZONE NIXOS_CHANNEL \
       ENABLE_DO_NETCONF PROVIDER_HINT \
       RAM_MIB RECOMMENDED_SWAPFILE_MIB HAS_SWAP_DEVICE \
-      SSH_KEYS_B64 \
       OPENCLAW_PROFILE_NAME OPENCLAW_LOCAL_DIR OPENCLAW_DOCS_DIR OPENCLAW_SECRETS_DIR \
-      TELEGRAM_CHAT_ID OPENCLAW_GATEWAY_TOKEN \
+      TELEGRAM_CHAT_ID \
       HAVE_TELEGRAM HAVE_OPENAI HAVE_ANTHROPIC \
       OPENCLAW_SYSTEM
     do
@@ -180,9 +179,29 @@ validate_hostname() {
   [[ "$h" =~ ^[a-zA-Z0-9][a-zA-Z0-9-]{0,62}$ ]]
 }
 
+validate_linux_username() {
+  local u="$1"
+  [[ "$u" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]]
+}
+
+validate_timezone() {
+  local tz="$1"
+  [[ -n "$tz" && -e "/usr/share/zoneinfo/$tz" && ! -d "/usr/share/zoneinfo/$tz" ]]
+}
+
 validate_int() {
   local v="$1"
   [[ "$v" =~ ^-?[0-9]+$ ]]
+}
+
+validate_safe_path() {
+  local p="$1"
+  [[ "$p" =~ ^/[A-Za-z0-9._/@:+-]+$ ]]
+}
+
+validate_provider_hint() {
+  local p="$1"
+  [[ -z "$p" || "$p" =~ ^[A-Za-z0-9._-]+$ ]]
 }
 
 detect_openclaw_system() {
@@ -453,7 +472,13 @@ phase1_prompt_inputs() {
   fi
 
   echo
-  prompt_default ADMIN_USER "Admin username to create on NixOS" "$ADMIN_USER"
+  while true; do
+    prompt_default ADMIN_USER "Admin username to create on NixOS" "$ADMIN_USER"
+    if validate_linux_username "$ADMIN_USER"; then
+      break
+    fi
+    warn "Invalid admin username: '$ADMIN_USER'. Use lowercase linux username style (e.g. lumi)."
+  done
 
   while true; do
     prompt_default HOSTNAME_SHORT "NixOS hostName (short RFC1035 label, no dots)" "$HOSTNAME_SHORT"
@@ -463,7 +488,14 @@ phase1_prompt_inputs() {
     warn "Invalid hostname: '$HOSTNAME_SHORT'. Use letters/numbers/hyphen only, max 63 chars."
   done
 
-  prompt_default TIMEZONE "Timezone" "$TIMEZONE"
+  while true; do
+    prompt_default TIMEZONE "Timezone" "$TIMEZONE"
+    if validate_timezone "$TIMEZONE"; then
+      break
+    fi
+    warn "Invalid timezone '$TIMEZONE'. Example: Europe/Berlin"
+  done
+
   prompt_default NIXOS_CHANNEL "NixOS channel" "$NIXOS_CHANNEL"
 
   if prompt_yes_no "Generate static networking config during migration (recommended for VPS)?" "yes"; then
@@ -472,7 +504,13 @@ phase1_prompt_inputs() {
     ENABLE_DO_NETCONF="no"
   fi
 
-  prompt_default PROVIDER_HINT "Provider hint for nixos-infect (optional, e.g. hetznercloud/lightsail)" "$PROVIDER_HINT"
+  while true; do
+    prompt_default PROVIDER_HINT "Provider hint for nixos-infect (optional, e.g. virtarix/hetznercloud/lightsail)" "$PROVIDER_HINT"
+    if validate_provider_hint "$PROVIDER_HINT"; then
+      break
+    fi
+    warn "Provider hint can only include letters, numbers, dot, underscore, or dash."
+  done
 
   prompt_ssh_keys
 
@@ -561,9 +599,32 @@ write_secret_file() {
   rm -f "$tmp"
 }
 
+load_existing_flake_values() {
+  local flake_path="$1"
+  [[ -f "$flake_path" ]] || return 0
+
+  local existing_token existing_chat_id
+  existing_token="$(sed -n 's/^[[:space:]]*token = "\([^"]*\)";.*/\1/p' "$flake_path" | head -n1 || true)"
+  existing_chat_id="$(sed -n 's/^[[:space:]]*allowFrom = \[[[:space:]]*\(-\?[0-9]\+\).*/\1/p' "$flake_path" | head -n1 || true)"
+
+  if [[ -n "$existing_token" && -z "${OPENCLAW_GATEWAY_TOKEN:-}" ]]; then
+    OPENCLAW_GATEWAY_TOKEN="$existing_token"
+  fi
+
+  if [[ -n "$existing_chat_id" && -z "${TELEGRAM_CHAT_ID:-}" ]]; then
+    TELEGRAM_CHAT_ID="$existing_chat_id"
+  fi
+}
+
 prompt_phase2_inputs() {
   # Defaults
-  ADMIN_USER="${ADMIN_USER:-${SUDO_USER:-lumi}}"
+  ADMIN_USER="${ADMIN_USER:-lumi}"
+
+  while ! validate_linux_username "$ADMIN_USER"; do
+    warn "Invalid admin username: '$ADMIN_USER'"
+    prompt_default ADMIN_USER "Admin username created during migration" "lumi"
+  done
+
   OPENCLAW_PROFILE_NAME="${OPENCLAW_PROFILE_NAME:-$ADMIN_USER}"
 
   local admin_home
@@ -572,6 +633,10 @@ prompt_phase2_inputs() {
   if [[ -z "$admin_home" ]]; then
     while true; do
       prompt_default ADMIN_USER "Admin username created during migration" "$ADMIN_USER"
+      if ! validate_linux_username "$ADMIN_USER"; then
+        warn "Invalid username format. Use lowercase linux username style (e.g. lumi)."
+        continue
+      fi
       admin_home="$(getent passwd "$ADMIN_USER" | cut -d: -f6 || true)"
       [[ -n "$admin_home" ]] && break
       warn "User '$ADMIN_USER' does not exist on this host."
@@ -587,13 +652,29 @@ prompt_phase2_inputs() {
   prompt_default OPENCLAW_DOCS_DIR "OpenClaw documents dir" "$OPENCLAW_DOCS_DIR"
   prompt_default OPENCLAW_SECRETS_DIR "Secrets dir" "$OPENCLAW_SECRETS_DIR"
 
+  validate_safe_path "$OPENCLAW_LOCAL_DIR" || die "Unsafe path for OPENCLAW_LOCAL_DIR: $OPENCLAW_LOCAL_DIR"
+  validate_safe_path "$OPENCLAW_DOCS_DIR" || die "Unsafe path for OPENCLAW_DOCS_DIR: $OPENCLAW_DOCS_DIR"
+  validate_safe_path "$OPENCLAW_SECRETS_DIR" || die "Unsafe path for OPENCLAW_SECRETS_DIR: $OPENCLAW_SECRETS_DIR"
+
+  load_existing_flake_values "$OPENCLAW_LOCAL_DIR/flake.nix"
+
+  local telegram_token_path openai_path anthropic_path
+  telegram_token_path="$OPENCLAW_SECRETS_DIR/telegram-bot-token"
+  openai_path="$OPENCLAW_SECRETS_DIR/openai-api-key"
+  anthropic_path="$OPENCLAW_SECRETS_DIR/anthropic-api-key"
+
   # Telegram is required for "ready to go" remote control
   HAVE_TELEGRAM="yes"
-  while true; do
-    prompt_secret TELEGRAM_BOT_TOKEN "Telegram bot token (@BotFather)"
-    [[ -n "$TELEGRAM_BOT_TOKEN" ]] && break
-    warn "Telegram bot token is required for a usable remote setup."
-  done
+  TELEGRAM_BOT_TOKEN=""
+  if [[ -s "$telegram_token_path" ]] && prompt_yes_no "Reuse existing Telegram token file ($telegram_token_path)?" "yes"; then
+    log "Reusing existing Telegram token file."
+  else
+    while true; do
+      prompt_secret TELEGRAM_BOT_TOKEN "Telegram bot token (@BotFather)"
+      [[ -n "$TELEGRAM_BOT_TOKEN" ]] && break
+      warn "Telegram bot token is required for a usable remote setup."
+    done
+  fi
 
   while true; do
     prompt_default TELEGRAM_CHAT_ID "Telegram user ID from @userinfobot (integer)" "${TELEGRAM_CHAT_ID:-}"
@@ -605,13 +686,19 @@ prompt_phase2_inputs() {
 
   HAVE_OPENAI="no"
   HAVE_ANTHROPIC="no"
+  OPENAI_API_KEY=""
+  ANTHROPIC_API_KEY=""
 
-  if prompt_yes_no "Add OpenAI API key?" "yes"; then
+  if [[ -s "$openai_path" ]] && prompt_yes_no "Reuse existing OpenAI API key file ($openai_path)?" "yes"; then
+    HAVE_OPENAI="yes"
+  elif prompt_yes_no "Add OpenAI API key?" "yes"; then
     prompt_secret OPENAI_API_KEY "OpenAI API key"
     [[ -n "$OPENAI_API_KEY" ]] && HAVE_OPENAI="yes"
   fi
 
-  if prompt_yes_no "Add Anthropic API key?" "yes"; then
+  if [[ -s "$anthropic_path" ]] && prompt_yes_no "Reuse existing Anthropic API key file ($anthropic_path)?" "yes"; then
+    HAVE_ANTHROPIC="yes"
+  elif prompt_yes_no "Add Anthropic API key?" "yes"; then
     prompt_secret ANTHROPIC_API_KEY "Anthropic API key"
     [[ -n "$ANTHROPIC_API_KEY" ]] && HAVE_ANTHROPIC="yes"
   fi

@@ -17,6 +17,11 @@ This guide is thorough but concise, with **one code block per command** for easy
 
 You can override prompts during runtime, but docs below assume `lumi`.
 
+Input validation highlights:
+- admin username must be a valid Linux username format (e.g. `lumi`)
+- timezone must exist on system (e.g. `Europe/Berlin`)
+- custom paths should be absolute paths
+
 ---
 
 ## What is in this repo
@@ -82,6 +87,8 @@ The script prompts for:
 - Telegram chat ID
 - OpenAI and/or Anthropic API key
 - OpenClaw directories/profile options
+
+On reruns, if secret files already exist, you can choose to reuse them instead of retyping values.
 
 ### 5) Validate service
 
@@ -215,6 +222,8 @@ sudo bash /etc/nixos/openclaw-migration/migrate.sh
 - Treat API keys and bot tokens as secrets.
 - Rotate tokens if accidentally exposed.
 - Keep private keys private (`id_ed25519`, never share it).
+- Migration reports are redacted for common secret patterns.
+- Persistent state avoids storing raw API key/token values.
 
 ---
 
