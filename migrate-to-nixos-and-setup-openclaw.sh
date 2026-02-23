@@ -12,7 +12,7 @@ set -Eeuo pipefail
 ################################################################################
 # Globals
 ################################################################################
-SCRIPT_VERSION="2.0.0"
+SCRIPT_VERSION="2.1.0"
 MIGRATION_DIR="/etc/nixos/openclaw-migration"
 STATE_FILE="$MIGRATION_DIR/state.env"
 PHASE1_IMPORT_FILE="$MIGRATION_DIR/host-extra.nix"
@@ -207,9 +207,14 @@ validate_timezone() {
   [[ -n "$tz" && -e "/usr/share/zoneinfo/$tz" && ! -d "/usr/share/zoneinfo/$tz" ]]
 }
 
-validate_int() {
-  local v="$1"
-  [[ "$v" =~ ^-?[0-9]+$ ]]
+validate_nix_channel() {
+  local c="$1"
+  [[ "$c" =~ ^[A-Za-z0-9._-]+$ ]]
+}
+
+validate_profile_name() {
+  local p="$1"
+  [[ "$p" =~ ^[A-Za-z0-9._-]+$ ]]
 }
 
 validate_safe_path() {
@@ -514,7 +519,13 @@ phase1_prompt_inputs() {
     warn "Invalid timezone '$TIMEZONE'. Example: America/Chicago"
   done
 
-  prompt_default NIXOS_CHANNEL "NixOS channel" "$NIXOS_CHANNEL"
+  while true; do
+    prompt_default NIXOS_CHANNEL "NixOS channel" "$NIXOS_CHANNEL"
+    if validate_nix_channel "$NIXOS_CHANNEL"; then
+      break
+    fi
+    warn "Invalid NixOS channel '$NIXOS_CHANNEL'. Use a value like nixos-24.11"
+  done
 
   if prompt_yes_no "Generate static networking config during migration (recommended for VPS)?" "yes"; then
     ENABLE_DO_NETCONF="yes"
@@ -665,7 +676,14 @@ prompt_phase2_inputs() {
   OPENCLAW_DOCS_DIR="${OPENCLAW_DOCS_DIR:-$OPENCLAW_LOCAL_DIR/documents}"
   OPENCLAW_SECRETS_DIR="${OPENCLAW_SECRETS_DIR:-$admin_home/.secrets}"
 
-  prompt_default OPENCLAW_PROFILE_NAME "Home Manager profile name" "$OPENCLAW_PROFILE_NAME"
+  while true; do
+    prompt_default OPENCLAW_PROFILE_NAME "Home Manager profile name" "$OPENCLAW_PROFILE_NAME"
+    if validate_profile_name "$OPENCLAW_PROFILE_NAME"; then
+      break
+    fi
+    warn "Invalid profile name '$OPENCLAW_PROFILE_NAME'. Use letters, numbers, dot, underscore, or dash."
+  done
+
   prompt_default OPENCLAW_LOCAL_DIR "OpenClaw local flake dir" "$OPENCLAW_LOCAL_DIR"
   prompt_default OPENCLAW_DOCS_DIR "OpenClaw documents dir" "$OPENCLAW_DOCS_DIR"
   prompt_default OPENCLAW_SECRETS_DIR "Secrets dir" "$OPENCLAW_SECRETS_DIR"
