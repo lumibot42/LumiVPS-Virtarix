@@ -89,12 +89,12 @@ sudo bash /etc/nixos/openclaw-migration/migrate.sh
 ```
 
 The script prompts for:
-- Telegram bot token
-- Telegram chat ID
-- OpenAI and/or Anthropic API key
 - OpenClaw directories/profile options
+- OpenAI and/or Anthropic API key
+- optional Telegram setup (you can skip)
 
 On reruns, if secret files already exist, you can choose to reuse them instead of retyping values.
+If Telegram is skipped, OpenClaw still boots; you can add channels later in `flake.nix`.
 
 ### 5) Validate service
 
@@ -177,7 +177,9 @@ ssh -T git@github.com
 
 ---
 
-## Telegram prerequisites
+## Telegram setup (optional)
+
+Skip this during migration if you do not want channel setup yet.
 
 ### Create bot token
 
@@ -187,7 +189,7 @@ Message `@BotFather` and create a bot.
 
 Message `@userinfobot` and copy your numeric user ID.
 
-You will enter both during script prompts.
+You can add both later by editing `flake.nix` and re-running Home Manager.
 
 ---
 

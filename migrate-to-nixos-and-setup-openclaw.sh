@@ -143,8 +143,8 @@ save_state() {
       ENABLE_DO_NETCONF PROVIDER_HINT \
       RAM_MIB RECOMMENDED_SWAPFILE_MIB HAS_SWAP_DEVICE \
       OPENCLAW_PROFILE_NAME OPENCLAW_LOCAL_DIR OPENCLAW_DOCS_DIR OPENCLAW_SECRETS_DIR \
-      TELEGRAM_CHAT_ID \
-      HAVE_TELEGRAM HAVE_OPENAI HAVE_ANTHROPIC \
+      TELEGRAM_CHAT_ID HAVE_TELEGRAM \
+      HAVE_OPENAI HAVE_ANTHROPIC \
       OPENCLAW_SYSTEM
     do
       printf '%s=%q\n' "$v" "${!v-}"
@@ -551,6 +551,7 @@ phase1_run() {
   need_cmd base64
   need_cmd findmnt
   need_cmd lsblk
+  need_cmd ip
   need_cmd tee
 
   persist_script_copy
@@ -686,26 +687,43 @@ prompt_phase2_inputs() {
   openai_path="$OPENCLAW_SECRETS_DIR/openai-api-key"
   anthropic_path="$OPENCLAW_SECRETS_DIR/anthropic-api-key"
 
-  # Telegram is required for "ready to go" remote control
-  HAVE_TELEGRAM="yes"
+  HAVE_TELEGRAM="${HAVE_TELEGRAM:-no}"
   TELEGRAM_BOT_TOKEN=""
-  if [[ -s "$telegram_token_path" ]] && prompt_yes_no "Reuse existing Telegram token file ($telegram_token_path)?" "yes"; then
-    log "Reusing existing Telegram token file."
-  else
-    while true; do
-      prompt_secret TELEGRAM_BOT_TOKEN "Telegram bot token (@BotFather)"
-      [[ -n "$TELEGRAM_BOT_TOKEN" ]] && break
-      warn "Telegram bot token is required for a usable remote setup."
-    done
+
+  if [[ "$HAVE_TELEGRAM" == "yes" ]]; then
+    if ! prompt_yes_no "Telegram was enabled previously. Keep Telegram enabled?" "yes"; then
+      HAVE_TELEGRAM="no"
+    fi
   fi
 
-  while true; do
-    prompt_default TELEGRAM_CHAT_ID "Telegram user ID from @userinfobot (integer)" "${TELEGRAM_CHAT_ID:-}"
-    if validate_int "$TELEGRAM_CHAT_ID"; then
-      break
+  if [[ "$HAVE_TELEGRAM" != "yes" ]]; then
+    if prompt_yes_no "Configure Telegram channel now?" "no"; then
+      HAVE_TELEGRAM="yes"
     fi
-    warn "Chat ID must be an integer (e.g. 12345678)."
-  done
+  fi
+
+  if [[ "$HAVE_TELEGRAM" == "yes" ]]; then
+    if [[ -s "$telegram_token_path" ]] && prompt_yes_no "Reuse existing Telegram token file ($telegram_token_path)?" "yes"; then
+      log "Reusing existing Telegram token file."
+    else
+      while true; do
+        prompt_secret TELEGRAM_BOT_TOKEN "Telegram bot token (@BotFather)"
+        [[ -n "$TELEGRAM_BOT_TOKEN" ]] && break
+        warn "Telegram bot token is required when Telegram is enabled."
+      done
+    fi
+
+    while true; do
+      prompt_default TELEGRAM_CHAT_ID "Telegram user ID from @userinfobot (integer)" "${TELEGRAM_CHAT_ID:-}"
+      if validate_int "$TELEGRAM_CHAT_ID"; then
+        break
+      fi
+      warn "Chat ID must be an integer (e.g. 12345678)."
+    done
+  else
+    TELEGRAM_CHAT_ID=""
+    log "Skipping Telegram setup. You can add channels later in flake.nix."
+  fi
 
   HAVE_OPENAI="no"
   HAVE_ANTHROPIC="no"
@@ -778,7 +796,7 @@ write_openclaw_secrets() {
 }
 
 generate_openclaw_flake() {
-  local admin_home plugin_env_lines
+  local admin_home plugin_env_lines telegram_config_block
   admin_home="$(getent passwd "$ADMIN_USER" | cut -d: -f6)"
 
   plugin_env_lines=""
@@ -787,6 +805,19 @@ generate_openclaw_flake() {
   fi
   if [[ "$HAVE_ANTHROPIC" == "yes" ]]; then
     plugin_env_lines+="                    ANTHROPIC_API_KEY = \"$OPENCLAW_SECRETS_DIR/anthropic-api-key\";\n"
+  fi
+
+  telegram_config_block=""
+  if [[ "$HAVE_TELEGRAM" == "yes" ]]; then
+    telegram_config_block+="\n                channels.telegram = {\n"
+    telegram_config_block+="                  tokenFile = \"$OPENCLAW_SECRETS_DIR/telegram-bot-token\";\n"
+    telegram_config_block+="                  allowFrom = [ ${TELEGRAM_CHAT_ID} ];\n"
+    telegram_config_block+="                  groups = {\n"
+    telegram_config_block+="                    \"*\" = {\n"
+    telegram_config_block+="                      requireMention = true;\n"
+    telegram_config_block+="                    };\n"
+    telegram_config_block+="                  };\n"
+    telegram_config_block+="                };\n"
   fi
 
   cat > "$OPENCLAW_LOCAL_DIR/flake.nix" <<EOF
@@ -838,16 +869,7 @@ generate_openclaw_flake() {
                   };
                 };
 
-                channels.telegram = {
-                  tokenFile = "${OPENCLAW_SECRETS_DIR}/telegram-bot-token";
-                  allowFrom = [ ${TELEGRAM_CHAT_ID} ];
-                  groups = {
-                    "*" = {
-                      requireMention = true;
-                    };
-                  };
-                };
-              };
+${telegram_config_block}              };
 
               customPlugins = [
                 {
@@ -912,6 +934,7 @@ phase2_run() {
   need_cmd getent
   need_cmd install
   need_cmd loginctl
+  need_cmd systemctl
 
   persist_script_copy
   load_state
