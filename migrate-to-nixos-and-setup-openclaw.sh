@@ -143,7 +143,6 @@ save_state() {
       ENABLE_DO_NETCONF PROVIDER_HINT \
       RAM_MIB RECOMMENDED_SWAPFILE_MIB HAS_SWAP_DEVICE \
       OPENCLAW_PROFILE_NAME OPENCLAW_LOCAL_DIR OPENCLAW_DOCS_DIR OPENCLAW_SECRETS_DIR \
-      TELEGRAM_CHAT_ID HAVE_TELEGRAM \
       HAVE_OPENAI HAVE_ANTHROPIC \
       OPENCLAW_SYSTEM
     do
@@ -627,16 +626,11 @@ load_existing_flake_values() {
   local flake_path="$1"
   [[ -f "$flake_path" ]] || return 0
 
-  local existing_token existing_chat_id
+  local existing_token
   existing_token="$(sed -n 's/^[[:space:]]*token = "\([^"]*\)";.*/\1/p' "$flake_path" | head -n1 || true)"
-  existing_chat_id="$(sed -n 's/^[[:space:]]*allowFrom = \[[[:space:]]*\(-\?[0-9]\+\).*/\1/p' "$flake_path" | head -n1 || true)"
 
   if [[ -n "$existing_token" && -z "${OPENCLAW_GATEWAY_TOKEN:-}" ]]; then
     OPENCLAW_GATEWAY_TOKEN="$existing_token"
-  fi
-
-  if [[ -n "$existing_chat_id" && -z "${TELEGRAM_CHAT_ID:-}" ]]; then
-    TELEGRAM_CHAT_ID="$existing_chat_id"
   fi
 }
 
@@ -682,48 +676,11 @@ prompt_phase2_inputs() {
 
   load_existing_flake_values "$OPENCLAW_LOCAL_DIR/flake.nix"
 
-  local telegram_token_path openai_path anthropic_path
-  telegram_token_path="$OPENCLAW_SECRETS_DIR/telegram-bot-token"
+  local openai_path anthropic_path
   openai_path="$OPENCLAW_SECRETS_DIR/openai-api-key"
   anthropic_path="$OPENCLAW_SECRETS_DIR/anthropic-api-key"
 
-  HAVE_TELEGRAM="${HAVE_TELEGRAM:-no}"
-  TELEGRAM_BOT_TOKEN=""
-
-  if [[ "$HAVE_TELEGRAM" == "yes" ]]; then
-    if ! prompt_yes_no "Telegram was enabled previously. Keep Telegram enabled?" "yes"; then
-      HAVE_TELEGRAM="no"
-    fi
-  fi
-
-  if [[ "$HAVE_TELEGRAM" != "yes" ]]; then
-    if prompt_yes_no "Configure Telegram channel now?" "no"; then
-      HAVE_TELEGRAM="yes"
-    fi
-  fi
-
-  if [[ "$HAVE_TELEGRAM" == "yes" ]]; then
-    if [[ -s "$telegram_token_path" ]] && prompt_yes_no "Reuse existing Telegram token file ($telegram_token_path)?" "yes"; then
-      log "Reusing existing Telegram token file."
-    else
-      while true; do
-        prompt_secret TELEGRAM_BOT_TOKEN "Telegram bot token (@BotFather)"
-        [[ -n "$TELEGRAM_BOT_TOKEN" ]] && break
-        warn "Telegram bot token is required when Telegram is enabled."
-      done
-    fi
-
-    while true; do
-      prompt_default TELEGRAM_CHAT_ID "Telegram user ID from @userinfobot (integer)" "${TELEGRAM_CHAT_ID:-}"
-      if validate_int "$TELEGRAM_CHAT_ID"; then
-        break
-      fi
-      warn "Chat ID must be an integer (e.g. 12345678)."
-    done
-  else
-    TELEGRAM_CHAT_ID=""
-    log "Skipping Telegram setup. You can add channels later in flake.nix."
-  fi
+  log "Skipping channel setup during bootstrap. Configure Discord (or any channel) later in flake.nix."
 
   HAVE_OPENAI="no"
   HAVE_ANTHROPIC="no"
@@ -779,10 +736,7 @@ prepare_openclaw_directories() {
 }
 
 write_openclaw_secrets() {
-  local openai_path anthropic_path telegram_token_path
-
-  telegram_token_path="$OPENCLAW_SECRETS_DIR/telegram-bot-token"
-  write_secret_file "$ADMIN_USER" "$telegram_token_path" "$TELEGRAM_BOT_TOKEN"
+  local openai_path anthropic_path
 
   if [[ "$HAVE_OPENAI" == "yes" ]]; then
     openai_path="$OPENCLAW_SECRETS_DIR/openai-api-key"
@@ -796,7 +750,7 @@ write_openclaw_secrets() {
 }
 
 generate_openclaw_flake() {
-  local admin_home plugin_env_lines telegram_config_block
+  local admin_home plugin_env_lines
   admin_home="$(getent passwd "$ADMIN_USER" | cut -d: -f6)"
 
   plugin_env_lines=""
@@ -805,19 +759,6 @@ generate_openclaw_flake() {
   fi
   if [[ "$HAVE_ANTHROPIC" == "yes" ]]; then
     plugin_env_lines+="                    ANTHROPIC_API_KEY = \"$OPENCLAW_SECRETS_DIR/anthropic-api-key\";\n"
-  fi
-
-  telegram_config_block=""
-  if [[ "$HAVE_TELEGRAM" == "yes" ]]; then
-    telegram_config_block+="\n                channels.telegram = {\n"
-    telegram_config_block+="                  tokenFile = \"$OPENCLAW_SECRETS_DIR/telegram-bot-token\";\n"
-    telegram_config_block+="                  allowFrom = [ ${TELEGRAM_CHAT_ID} ];\n"
-    telegram_config_block+="                  groups = {\n"
-    telegram_config_block+="                    \"*\" = {\n"
-    telegram_config_block+="                      requireMention = true;\n"
-    telegram_config_block+="                    };\n"
-    telegram_config_block+="                  };\n"
-    telegram_config_block+="                };\n"
   fi
 
   cat > "$OPENCLAW_LOCAL_DIR/flake.nix" <<EOF
@@ -869,7 +810,7 @@ generate_openclaw_flake() {
                   };
                 };
 
-${telegram_config_block}              };
+              };
 
               customPlugins = [
                 {
@@ -946,7 +887,6 @@ phase2_run() {
   append_report "Local dir: $OPENCLAW_LOCAL_DIR"
   append_report "Docs dir: $OPENCLAW_DOCS_DIR"
   append_report "Secrets dir: $OPENCLAW_SECRETS_DIR"
-  append_report "Telegram configured: $HAVE_TELEGRAM"
   append_report "OpenAI key configured: $HAVE_OPENAI"
   append_report "Anthropic key configured: $HAVE_ANTHROPIC"
 

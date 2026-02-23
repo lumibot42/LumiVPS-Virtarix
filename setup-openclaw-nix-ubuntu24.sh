@@ -27,8 +27,7 @@ need_cmd() { command -v "$1" >/dev/null 2>&1 || { err "Missing command: $1"; exi
 : "${OPENCLAW_SECRETS_DIR:=$HOME/.secrets}"
 
 # Optional provider settings
-: "${TELEGRAM_BOT_TOKEN:=}"
-: "${TELEGRAM_CHAT_ID:=}"
+: "${OPENAI_API_KEY:=}"
 : "${ANTHROPIC_API_KEY:=}"
 
 #######################################
@@ -118,8 +117,7 @@ write_secret_file() {
   fi
 }
 
-write_secret_file "$OPENCLAW_SECRETS_DIR/telegram-bot-token" "$TELEGRAM_BOT_TOKEN"
-write_secret_file "$OPENCLAW_SECRETS_DIR/telegram-chat-id" "$TELEGRAM_CHAT_ID"
+write_secret_file "$OPENCLAW_SECRETS_DIR/openai-api-key" "$OPENAI_API_KEY"
 write_secret_file "$OPENCLAW_SECRETS_DIR/anthropic-api-key" "$ANTHROPIC_API_KEY"
 
 #######################################
@@ -137,12 +135,11 @@ sed -i "s|home.homeDirectory *= *\"[^\"]*\"|home.homeDirectory = \"$HOME\"|g" fl
 #######################################
 # 7) Guidance for secrets wiring
 #######################################
-if [[ -z "$TELEGRAM_BOT_TOKEN" || -z "$TELEGRAM_CHAT_ID" || -z "$ANTHROPIC_API_KEY" ]]; then
-  warn "Some secrets are missing. Set these env vars before rerun for full automation:"
-  echo "  TELEGRAM_BOT_TOKEN"
-  echo "  TELEGRAM_CHAT_ID"
+if [[ -z "$OPENAI_API_KEY" && -z "$ANTHROPIC_API_KEY" ]]; then
+  warn "No model API keys provided. Set one of these env vars before rerun for full automation:"
+  echo "  OPENAI_API_KEY"
   echo "  ANTHROPIC_API_KEY"
-  warn "You can still continue if your flake uses different providers/models."
+  warn "You can continue now and wire providers/channels later in flake.nix."
 fi
 
 #######################################
@@ -171,4 +168,4 @@ else
 fi
 
 log "Done."
-log "Next: message your bot once to complete bootstrap identity prompts if enabled."
+log "Next: configure channels/providers in flake.nix as needed, then rerun Home Manager."
