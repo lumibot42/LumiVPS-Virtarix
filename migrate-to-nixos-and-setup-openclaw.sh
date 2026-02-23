@@ -427,7 +427,7 @@ phase1_prompt_inputs() {
   TIMEZONE="${TIMEZONE:-Europe/Berlin}"
   NIXOS_CHANNEL="${NIXOS_CHANNEL:-nixos-24.11}"
   ENABLE_DO_NETCONF="${ENABLE_DO_NETCONF:-yes}"
-  PROVIDER_HINT="${PROVIDER_HINT:-}"
+  PROVIDER_HINT="${PROVIDER_HINT:-virtarix}"
 
   log "Host facts"
   echo "  Root mount source : ${ROOT_SOURCE:-unknown}"

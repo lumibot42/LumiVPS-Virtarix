@@ -54,6 +54,8 @@ The script will prompt for:
 - SSH public keys
 - provider/network hints
 
+Default provider hint in this repo is set to `virtarix`.
+
 It then runs migration and reboots.
 
 ### 3) Reconnect after reboot (now on NixOS)
