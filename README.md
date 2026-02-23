@@ -6,7 +6,16 @@ End-to-end automation for:
 2. **OpenClaw setup in Nix mode**
 3. **Post-reboot continuation using the same script**
 
-This guide is thorough but compact, with **one code block per command** for easy copy/paste.
+This guide is thorough but concise, with **one code block per command** for easy copy/paste.
+
+---
+
+## Defaults used by this repo
+
+- **Default admin user:** `lumi`
+- **Default provider hint:** `virtarix`
+
+You can override prompts during runtime, but docs below assume `lumi`.
 
 ---
 
@@ -22,10 +31,10 @@ This guide is thorough but compact, with **one code block per command** for easy
 
 ## Before you start (important)
 
-- You should have a **fresh or disposable Ubuntu 24.04 VPS**.
+- Use a **fresh or disposable Ubuntu 24.04 VPS**.
 - The migration is **destructive** to the current OS install.
-- Ensure you have **provider console/recovery access** (Hetzner Console, DO Recovery, etc.) in case SSH/network goes wrong.
-- Keep at least one valid SSH public key ready.
+- Ensure provider console/recovery access is available.
+- Have at least one valid SSH public key ready.
 
 ---
 
@@ -47,22 +56,19 @@ cd LumiVPS-Virtarix
 sudo bash ./migrate-to-nixos-and-setup-openclaw.sh
 ```
 
-The script will prompt for:
-- admin username
+The script prompts for:
+- admin username (default `lumi`)
 - hostname
 - timezone
 - SSH public keys
-- provider/network hints
+- provider/network hints (provider default `virtarix`)
 
-Default provider hint in this repo is set to `virtarix`.
-Default admin username is `lumi`.
-
-It then runs migration and reboots.
+It then starts migration and reboots.
 
 ### 3) Reconnect after reboot (now on NixOS)
 
 ```bash
-ssh <admin-user>@<server-ip>
+ssh lumi@<server-ip>
 ```
 
 ### 4) Run Phase 2 (OpenClaw setup)
@@ -71,7 +77,7 @@ ssh <admin-user>@<server-ip>
 sudo bash /etc/nixos/openclaw-migration/migrate.sh
 ```
 
-The script will prompt for:
+The script prompts for:
 - Telegram bot token
 - Telegram chat ID
 - OpenAI and/or Anthropic API key
@@ -80,11 +86,11 @@ The script will prompt for:
 ### 5) Validate service
 
 ```bash
-sudo -u <admin-user> systemctl --user status openclaw-gateway
+sudo -u lumi systemctl --user status openclaw-gateway
 ```
 
 ```bash
-sudo -u <admin-user> journalctl --user -u openclaw-gateway -f
+sudo -u lumi journalctl --user -u openclaw-gateway -f
 ```
 
 ---
@@ -105,7 +111,7 @@ Use this if you need SSH keys for:
 - VPS login
 - GitHub authentication
 
-### Option A: PowerShell (Windows 10/11 built-in OpenSSH)
+### PowerShell (Windows 10/11 built-in OpenSSH)
 
 ```powershell
 ssh-keygen -t ed25519 -C "your_email@example.com"
@@ -140,7 +146,7 @@ ssh-add $env:USERPROFILE\.ssh\id_ed25519
 ssh -T git@github.com
 ```
 
-If first connection asks to trust host, type `yes`.
+If prompted to trust host, type `yes`.
 
 ---
 
@@ -150,7 +156,7 @@ If first connection asks to trust host, type `yes`.
 2. Key type: **Authentication key**
 3. Paste `id_ed25519.pub`
 
-Then test from your terminal:
+Then test from terminal:
 
 ```bash
 ssh -T git@github.com
@@ -162,7 +168,7 @@ ssh -T git@github.com
 
 ### Create bot token
 
-Message `@BotFather` in Telegram and create a bot.
+Message `@BotFather` and create a bot.
 
 ### Get your chat ID
 
@@ -176,7 +182,7 @@ You will enter both during script prompts.
 
 ### If SSH does not come back after migration
 
-Use VPS web console/recovery mode and check boot/network.
+Use VPS web console/recovery mode and inspect boot/network.
 
 ### Check migration artifacts
 
@@ -208,7 +214,7 @@ sudo bash /etc/nixos/openclaw-migration/migrate.sh
 
 - Treat API keys and bot tokens as secrets.
 - Rotate tokens if accidentally exposed.
-- Keep SSH private keys private (`id_ed25519`, never share it).
+- Keep private keys private (`id_ed25519`, never share it).
 
 ---
 
