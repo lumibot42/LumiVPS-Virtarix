@@ -55,6 +55,7 @@ The script will prompt for:
 - provider/network hints
 
 Default provider hint in this repo is set to `virtarix`.
+Default admin username is `lumi`.
 
 It then runs migration and reboots.
 

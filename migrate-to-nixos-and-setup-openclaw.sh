@@ -422,7 +422,7 @@ phase1_prompt_inputs() {
   default_host="${default_host%%.*}"
   [[ -z "$default_host" ]] && default_host="openclaw-vps"
 
-  ADMIN_USER="${ADMIN_USER:-erik}"
+  ADMIN_USER="${ADMIN_USER:-lumi}"
   HOSTNAME_SHORT="${HOSTNAME_SHORT:-$default_host}"
   TIMEZONE="${TIMEZONE:-Europe/Berlin}"
   NIXOS_CHANNEL="${NIXOS_CHANNEL:-nixos-24.11}"
@@ -549,7 +549,7 @@ write_secret_file() {
 
 prompt_phase2_inputs() {
   # Defaults
-  ADMIN_USER="${ADMIN_USER:-${SUDO_USER:-erik}}"
+  ADMIN_USER="${ADMIN_USER:-${SUDO_USER:-lumi}}"
   OPENCLAW_PROFILE_NAME="${OPENCLAW_PROFILE_NAME:-$ADMIN_USER}"
 
   local admin_home
