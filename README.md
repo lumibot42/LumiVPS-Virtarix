@@ -23,6 +23,11 @@ Input validation highlights:
 - timezone must exist on system (e.g. `America/Chicago`)
 - custom paths should be absolute paths
 
+PATH handling highlights:
+- script enforces a hardened common PATH for root + non-interactive shells
+- user-context commands are run with explicit PATH bootstrap
+- command locations are written into the migration report for debugging
+
 ---
 
 ## What is in this repo
@@ -202,6 +207,12 @@ sudo ls -la /etc/nixos/openclaw-migration
 
 ```bash
 sudo cat /etc/nixos/openclaw-migration/last-run-report.txt
+```
+
+### Show PATH + command resolution captured by script
+
+```bash
+sudo grep -E "^(PATH in use|cmd )" /etc/nixos/openclaw-migration/last-run-report.txt
 ```
 
 ### View infect log

@@ -26,6 +26,10 @@ OS_ID="unknown"
 OS_VERSION="unknown"
 OS_PRETTY="unknown"
 
+# PATH hardening for non-interactive shells and minimal VPS images.
+COMMON_PATH="/run/current-system/sw/bin:/nix/var/nix/profiles/default/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+export PATH="$COMMON_PATH:${PATH:-}"
+
 ################################################################################
 # Logging helpers
 ################################################################################
@@ -40,6 +44,21 @@ die() {
 
 need_cmd() {
   command -v "$1" >/dev/null 2>&1 || die "Missing required command: $1"
+}
+
+cmd_path() {
+  command -v "$1" 2>/dev/null || true
+}
+
+report_core_paths() {
+  append_report "PATH in use: $PATH"
+  append_report "cmd bash: $(cmd_path bash)"
+  append_report "cmd env: $(cmd_path env)"
+  append_report "cmd sed: $(cmd_path sed)"
+  append_report "cmd awk: $(cmd_path awk)"
+  append_report "cmd nix: $(cmd_path nix)"
+  append_report "cmd systemctl: $(cmd_path systemctl)"
+  append_report "cmd loginctl: $(cmd_path loginctl)"
 }
 
 ################################################################################
@@ -525,6 +544,7 @@ phase1_run() {
 
   write_report_header
   append_report "Phase: Ubuntu -> NixOS migration"
+  report_core_paths
 
   need_cmd awk
   need_cmd sed
@@ -578,10 +598,13 @@ phase1_run() {
 ################################################################################
 run_as_admin() {
   local cmd="$1"
+  local wrapped
+  wrapped="export PATH=\"$COMMON_PATH:\$PATH\"; $cmd"
+
   if command -v sudo >/dev/null 2>&1; then
-    sudo -H -u "$ADMIN_USER" bash -lc "$cmd"
+    sudo -H -u "$ADMIN_USER" env PATH="$COMMON_PATH" bash -lc "$wrapped"
   else
-    su - "$ADMIN_USER" -c "$cmd"
+    su - "$ADMIN_USER" -c "$wrapped"
   fi
 }
 
@@ -883,6 +906,7 @@ phase2_run() {
 
   write_report_header
   append_report "Phase: NixOS OpenClaw setup"
+  report_core_paths
 
   need_cmd nix
   need_cmd getent
