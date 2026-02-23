@@ -146,8 +146,22 @@ Host OS: $OS_PRETTY ($OS_ID $OS_VERSION)
 EOF
 }
 
+sanitize_report_line() {
+  local line="$*"
+
+  # Redact obvious key/value style secrets if they ever get passed here.
+  line="$(printf '%s' "$line" | sed -E \
+    -e 's/([A-Za-z0-9_]*(TOKEN|SECRET|PASSWORD|API_KEY)[A-Za-z0-9_]*[[:space:]]*[:=][[:space:]]*)[^[:space:]]+/\1<redacted>/g' \
+    -e 's/(ssh-(ed25519|rsa)[[:space:]]+[A-Za-z0-9+\/=]+)([[:space:]].*)?/ssh-key <redacted>/g' \
+  )"
+
+  printf '%s' "$line"
+}
+
 append_report() {
-  printf '%s\n' "$*" >> "$REPORT_FILE"
+  local safe_line
+  safe_line="$(sanitize_report_line "$*")"
+  printf '%s\n' "$safe_line" >> "$REPORT_FILE"
 }
 
 persist_script_copy() {
