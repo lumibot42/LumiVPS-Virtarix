@@ -6,6 +6,8 @@ Automated path from a **fresh Ubuntu 24.04 VPS** to:
 2. OpenClaw in Nix mode
 3. Post-reboot continuation using the same script
 
+For an execution-grade checklist with exact prompt answers and fast recovery actions, see `RUNBOOK.md`.
+
 ---
 
 ## Assumptions (explicit)
